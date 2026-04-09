@@ -8,14 +8,12 @@ on:
       JIRA_TOKEN:
         required: true
 
-permissions:
-  pull-requests: write
-  contents: read
-
 jobs:
   lint-and-test:
     name: Lint & Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       passed: ${{ steps.test.outcome }}
       coverage: ${{ steps.coverage.outputs.pct }}
@@ -101,6 +99,9 @@ jobs:
   mcp-agent-review:
     name: MCP Agent Review
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
     needs: [lint-and-test]
     if: always() && !github.event.pull_request.draft
     concurrency:
