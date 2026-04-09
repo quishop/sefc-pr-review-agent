@@ -92,6 +92,10 @@ CONTEXT:
 - Branch: ${HEAD_REF} → ${BASE_REF}
 - Jira ticket: ${JIRA_TICKET || 'None'}
 
+BRANCH NAMING CONVENTION:
+Developers use "feat/{JIRA-KEY}" or "fix/{JIRA-KEY}" (e.g. feat/SFA-997, fix/SFA-1024).
+The Jira ticket key is extracted from the branch name. Use this ticket to query Jira for context.
+
 COMMITS:
 ${commits}
 
