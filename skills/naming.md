@@ -1,28 +1,43 @@
 # Skill: 命名規範
 
-## 通用規則
+## JavaScript / TypeScript
 
-- 變數、函式：camelCase
-- 元件、Class：PascalCase
-- 檔案名稱：kebab-case
-- 常數：UPPER_SNAKE_CASE
-- 布林變數以 is / has / should 開頭，例如 isLoading、hasError
+- 變數、函式：camelCase（`getUserName`, `isLoading`）
+- 元件、Class：PascalCase（`UserProfile`, `DataService`）
+- 常數：UPPER_SNAKE_CASE（`MAX_RETRY_COUNT`, `API_BASE_URL`）
+- 檔案名稱：kebab-case（`user-profile.tsx`, `data-service.ts`）
+- 布林變數以 is / has / should / can 開頭（`isActive`, `hasPermission`）
 
-## 禁止事項
+## Python
 
-- 不使用單字母變數（除迴圈 index i、j、k 外）
-- 不使用縮寫，除非是公認慣例（id、url、api、dto）
-- 不使用 data、info、temp、obj 等無意義命名
-- TypeScript 專案禁止使用 any 型別
+- 變數、函式：snake_case（`get_user_name`, `is_loading`）
+- Class：PascalCase（`UserProfile`, `DataService`）
+- 常數：UPPER_SNAKE_CASE（`MAX_RETRY`, `DEFAULT_TIMEOUT`）
+- 私有成員：前綴 `_`（`_internal_method`），不用 `__` 除非刻意 name mangling
+- 模組/檔案名稱：snake_case（`user_profile.py`, `data_service.py`）
 
-## 函式命名
+## 禁止命名（附修正建議）
 
-- 取值：getXxx
-- 設值：setXxx
-- 判斷：isXxx / hasXxx / checkXxx
-- 事件處理：handleXxx / onXxx
-- 非同步：fetchXxx / loadXxx / saveXxx
+| Bad | Why | Better |
+|-----|-----|--------|
+| `data` | 太模糊 | `userData`, `responsePayload` |
+| `info` | 沒有語意 | `userProfile`, `orderDetails` |
+| `temp` | 臨時到底是什麼 | `cachedResult`, `pendingItem` |
+| `obj`, `val`, `res`, `ret` | 縮寫無意義 | 用完整有意義的名稱 |
+| 單字母 `x`, `d`, `s` | 不可讀 | 只允許 loop `i,j,k` 和 lambda `_` |
+| `Manager`, `Handler`, `Helper` | 容易變成 god class | 用具體動作命名 |
+
+## 函式命名慣例
+
+| 動作 | 前綴 | 例子 |
+|------|------|------|
+| 取值 | get / fetch | `getUser()`, `fetchOrders()` |
+| 設值 | set / update | `setName()`, `updateStatus()` |
+| 判斷 | is / has / can | `isValid()`, `hasPermission()` |
+| 轉換 | to / from / parse | `toJSON()`, `fromDTO()` |
+| 建立 / 刪除 | create / delete | `createUser()`, `deleteItem()` |
+| 事件 | handle / on | `handleSubmit()`, `onClick()` |
 
 ## 發現違規時
 
-列為 [SUGGESTION]，說明違規位置和建議名稱。
+列為 [SUGGESTION]，格式：`[SUGGESTION] file:line — \`oldName\` → \`suggestedName\` (reason)`

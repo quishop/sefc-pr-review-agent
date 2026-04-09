@@ -3,37 +3,79 @@
 ## 型別標注
 
 - 函式參數與回傳值必須有 type hints
-- 使用 `from __future__ import annotations` 支援延遲評估
-- 複雜型別使用 `TypeAlias` 或 `TypeVar`
-- 禁止使用 `Any` 除非有明確理由並加註解說明
+- 禁止使用 `Any` 除非有明確註解說明理由
+- 複雜型別使用 `TypeAlias`、`TypeVar` 或 `Protocol`
+- 回傳 `None` 的函式標注 `-> None`
 
-## 例外處理
+```python
+# Bad
+def process(data, config):
+    ...
 
-- 禁止 bare `except:` 或 `except Exception:`（必須捕捉特定例外）
-- 非同步程式碼中 `asyncio.CancelledError` 不得被靜默吞掉
-- 每個 try/except 區塊必須有明確的錯誤處理（log 或 re-raise）
+# Good
+def process(data: dict[str, Any], config: ProcessConfig) -> ProcessResult:
+    ...
+```
+
+## 例外處理（bare except = [MUST FIX]）
+
+- 禁止 `except:` 和 `except Exception:`（必須捕捉特定例外）
+- `asyncio.CancelledError` 不得被靜默吞掉
+- 每個 except 區塊必須 log 或 re-raise，不得空 `pass`
+- 不要用 exception 做流程控制
+
+```python
+# Bad — [MUST FIX]
+try:
+    result = await fetch_data()
+except:
+    pass
+
+# Good
+try:
+    result = await fetch_data()
+except httpx.TimeoutException:
+    logger.warning("Fetch timeout, using cached data")
+    result = get_cached_data()
+```
 
 ## Import 規範
 
-- 使用 isort 排序：標準庫 → 第三方 → 本地
-- 禁止 wildcard import (`from module import *`)
-- 相對 import 限制在同 package 內
+- 排序：標準庫 → 第三方 → 本地（isort 風格）
+- 禁止 `from module import *`
+- 避免 circular import（如果需要，用 `TYPE_CHECKING` guard）
 
 ## 非同步處理
 
-- async 函式必須用 `await` 呼叫，不得 floating
-- 使用 `asyncio.gather()` 進行並行，不使用手動 thread
-- async generator 必須有適當的清理邏輯
+- async 函式必須 `await`，不得 floating promise
+- 並行用 `asyncio.gather()` 或 `asyncio.TaskGroup`，不用 `threading`
+- `async with` 確保資源清理（DB connection、HTTP session）
+- timeout 使用 `asyncio.wait_for()` 或 `asyncio.timeout()`
 
-## 程式碼品質
+## Django 特定
 
-- 函式長度建議不超過 50 行
-- 單一函式單一職責
-- 使用 dataclass 或 Pydantic model 取代 raw dict
-- 字串格式化使用 f-string，不使用 % 或 .format()
+- View 必須有適當的 permission class
+- `QuerySet` 避免 N+1：用 `select_related()` / `prefetch_related()`
+- `Model.objects.all()` 在 view 中必須加 filter 或 pagination，不得無限制查詢
+- Form/Serializer 的 `validate()` 不要有 side effect
+- 自訂 migration 必須有 `reverse_code`
+
+## 常見 Bug Pattern（發現即 [MUST FIX]）
+
+- Mutable default argument：`def f(items=[])` → `def f(items=None)`
+- Late binding closure：`for i in range(n): fns.append(lambda: i)` → 用 default arg `lambda i=i: i`
+- `datetime.now()` 沒帶 timezone → 用 `datetime.now(tz=UTC)` 或 Django 的 `timezone.now()`
+- `==` 比較 `None` → 用 `is None`
+- `os.path.join` 拼接使用者輸入 → path traversal 風險
+
+## 程式碼品質（[SUGGESTION]）
+
+- 函式超過 50 行 → 建議拆分
+- 用 `dataclass` 或 Pydantic `BaseModel` 取代 raw dict
+- f-string 取代 `%` 和 `.format()`
+- 用 `pathlib.Path` 取代 `os.path`
 
 ## 發現違規時
 
-bare except → [MUST FIX]
-缺少 type hints → [SUGGESTION]
-其餘 → [SUGGESTION]
+bare except、mutable default、N+1 query → [MUST FIX]
+缺少 type hints、程式碼品質 → [SUGGESTION]
