@@ -120,7 +120,7 @@ jobs:
       - name: Checkout shared-workflows
         uses: actions/checkout@v4
         with:
-          repository: quishop/shared-workflows
+          repository: quishop/sefc-pr-review-agent
           path: .shared-workflows
           token: ${{ secrets.GITHUB_TOKEN }}
 
