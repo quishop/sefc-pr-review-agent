@@ -5,10 +5,6 @@ on:
     secrets:
       ANTHROPIC_API_KEY:
         required: true
-      JIRA_BASE_URL:
-        required: true
-      JIRA_EMAIL:
-        required: true
       JIRA_TOKEN:
         required: true
 
@@ -144,8 +140,8 @@ jobs:
       - name: Run MCP Agent
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_BASE_URL: ${{ vars.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ vars.JIRA_EMAIL }}
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
