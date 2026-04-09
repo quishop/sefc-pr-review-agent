@@ -91,6 +91,7 @@ RULES:
 - [MUST FIX]: only for code logic bugs, unhandled errors, security vulnerabilities, or missing AC implementation.
 - [SUGGESTION]: naming, readability, PR description format, missing tests, style issues.
 - PR description formatting issues (unchecked items, missing fields) are SUGGESTION, never MUST FIX.
+- If the diff is TRUNCATED: you are seeing incomplete code. Do NOT flag syntax errors, missing closing braces, or incomplete logic as MUST FIX if the issue could be caused by truncation. Only flag issues where you can see BOTH the problematic code AND enough surrounding context to be certain it's a real bug. When uncertain, downgrade to [SUGGESTION] with a note that verification is needed due to truncated diff.
 
 STEPS:
 1. ${JIRA_TICKET
