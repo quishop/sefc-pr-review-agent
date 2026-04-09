@@ -74,82 +74,47 @@ const mcpServers = [
 ];
 
 // ── Prompt ─────────────────────────────────────────────────────
-const prompt = `
-You are an AI code reviewer for the ${REPO} repository.
-Follow the review skills below to conduct a thorough PR review.
+// Optimized: concise instructions, clear boundaries, structured output
+const prompt = `You are a code reviewer for ${REPO}. Review PR #${PR_NUMBER} and post a review comment.
 
-## Review Skills
+RULES:
+- Only review files in the diff. Do NOT suggest changes to files not in the diff.
+- Only flag issues you can see in the code. Do NOT assume missing files or configs in other repos.
+- [MUST FIX]: only for code logic bugs, unhandled errors, security vulnerabilities, or missing AC implementation.
+- [SUGGESTION]: naming, readability, PR description format, missing tests, style issues.
+- PR description formatting issues (unchecked items, missing fields) are SUGGESTION, never MUST FIX.
+
+STEPS:
+1. ${JIRA_TICKET
+  ? `Use atlassian MCP to get ${JIRA_TICKET} from ${JIRA_BASE_URL}. Extract the Acceptance Criteria (AC). If AC exists, check each item against the diff: ✅ covered or ❌ not covered. Uncovered AC = [MUST FIX]. If no AC field in ticket, write "No AC defined in ticket". If MCP fails, write "Jira AC unavailable".`
+  : 'No Jira ticket found. Skip AC check. Write "No Jira ticket" in AC section.'}
+2. Review the diff using these rules:
 ${skills}
+3. Use github MCP to create a pull request review on ${REPO} PR #${PR_NUMBER} with event "COMMENT" (not APPROVE/REQUEST_CHANGES). Format:
 
-## PR Information
-- PR #${PR_NUMBER}: ${PR_TITLE}
-- Author: ${PR_AUTHOR}
-- Branch: ${HEAD_REF} -> ${BASE_REF}
-- URL: ${PR_URL}
-- Jira Ticket: ${JIRA_TICKET || 'Not found'}
-${diffTruncated ? '- WARNING: Diff was truncated. This is a partial review.' : ''}
+## AI Code Review
+**Jira**: ${JIRA_TICKET || 'N/A'} | **CI**: ${TEST_PASSED === 'success' ? 'PASSED' : 'FAILED'} | **Coverage**: ${COVERAGE || 'N/A'}% | **Skills**: ${skillNames.join(', ')}
+### AC Coverage
+[AC items with status, or "No Jira ticket" / "No AC defined" / "Jira AC unavailable"]
+### Must Fix
+[items with file:line, or "None"]
+### Suggestions
+[items, or "None"]
+### Score
+X / 5 — [one line reason]
+---
+_Automated review by sefc-pr-review-agent_
 
-## PR Description
+PR: ${PR_TITLE} by ${PR_AUTHOR} (${HEAD_REF} → ${BASE_REF})
+${diffTruncated ? '⚠️ Diff truncated. Partial review only.' : ''}
+
+PR Description:
 ${PR_BODY || '(empty)'}
 
-## CI Results
-${ciSummary}
-
-## Code Diff
+Diff:
 \`\`\`diff
 ${diff}
 \`\`\`
-
----
-
-## Instructions (execute in order):
-
-### Step 1: PR Structure Validation
-Follow the rules in review.md to validate the PR description.
-Check for: Jira ticket link, change description (>20 chars), test plan, checklist.
-
-### Step 2: Get Jira Acceptance Criteria
-${JIRA_TICKET
-  ? `Use atlassian MCP to query ${JIRA_TICKET} at ${JIRA_BASE_URL}. Get Summary, Acceptance Criteria, and Priority.
-If the MCP call fails, note "Jira AC unavailable" and proceed with code-only review.`
-  : 'No Jira ticket found in branch name. Skip AC check.'}
-
-### Step 3: Code Review
-Review the diff according to loaded skills. Output:
-- AC coverage status (if Jira AC was retrieved)
-- [MUST FIX] issues (with file name and line number)
-- [SUGGESTION] improvements
-- [SCOPE] changes outside the ticket scope
-
-### Step 4: Post PR Review Comment
-Use github MCP to create a pull request review on ${REPO} PR #${PR_NUMBER}.
-
-IMPORTANT: Use event type "COMMENT" (not "APPROVE" or "REQUEST_CHANGES").
-This is comment-only mode for validation.
-
-Format the review body as:
-
-## AI Code Review
-
-**Jira**: ${JIRA_TICKET || 'N/A'}
-**CI**: [status]
-**Coverage**: [value]%
-**Skills loaded**: ${skillNames.join(', ')}
-
-### AC Coverage
-[list each AC item with coverage status, or "No Jira AC available"]
-
-### Must Fix
-[MUST FIX items, or "None"]
-
-### Suggestions
-[SUGGESTION items, or "None"]
-
-### Score
-X / 5 — [explanation]
-
----
-_Automated review by MCP Agent (comment-only mode)_
 `;
 
 // ── Call Claude API ────────────────────────────────────────────
