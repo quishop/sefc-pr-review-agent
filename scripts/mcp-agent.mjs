@@ -2,6 +2,7 @@
 // MCP Agent PR Review — comment-only mode (Week 1)
 // Uses Anthropic Messages API with server-side MCP for Jira AC + GitHub review
 import { readFileSync, writeFileSync } from 'fs';
+import { execSync } from 'child_process';
 import { loadSkills } from './skill-loader.mjs';
 
 // ── Environment Variables ──────────────────────────────────────
@@ -18,27 +19,34 @@ const {
 // ── Config ─────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-20250514';
 const MAX_TOKENS = 4096;
-const DIFF_LIMIT = 12000;       // chars
-const DIFF_SKIP_LIMIT = 50000;  // chars — skip review entirely
+const DIFF_LIMIT = 12000;       // chars — truncate, never skip
 
 // ── Diff ───────────────────────────────────────────────────────
 let diff = '';
+let diffStat = '';
 let diffTruncated = false;
 let diffTotalLines = 0;
+let diffTotalChars = 0;
+
+// Get diff stat (always available, small size)
+try {
+  diffStat = execSync(
+    `git diff origin/${BASE_REF}...HEAD --stat`,
+    { encoding: 'utf8' }
+  ).trim();
+} catch {
+  diffStat = '(unable to get diff stat)';
+}
+
 try {
   const rawDiff = readFileSync('/tmp/pr.diff', 'utf8');
   diffTotalLines = rawDiff.split('\n').length;
+  diffTotalChars = rawDiff.length;
 
-  if (rawDiff.length > DIFF_SKIP_LIMIT) {
-    console.log(`Diff too large (${rawDiff.length} chars, ${diffTotalLines} lines). Skipping review.`);
-    // Post a comment explaining why we skipped
-    console.log(`::warning::PR diff too large for automated review (${diffTotalLines} lines). Please request manual review.`);
-    process.exit(0);
-  }
-
+  // Always truncate to DIFF_LIMIT — never skip entirely
   if (rawDiff.length > DIFF_LIMIT) {
     diff = rawDiff.slice(0, DIFF_LIMIT) +
-      `\n\n[PARTIAL REVIEW: diff truncated at ${DIFF_LIMIT} chars. Full diff has ${diffTotalLines} lines. Focus review on the included portion.]`;
+      `\n\n[PARTIAL REVIEW: diff truncated at ${DIFF_LIMIT} chars. Full diff has ${diffTotalLines} lines (${diffTotalChars} chars). Review based on truncated diff + file stat below.]`;
     diffTruncated = true;
     console.log(`Diff truncated: ${rawDiff.length} -> ${DIFF_LIMIT} chars (${diffTotalLines} total lines)`);
   } else {
@@ -106,12 +114,13 @@ X / 5 — [one line reason]
 _Automated review by sefc-pr-review-agent_
 
 PR: ${PR_TITLE} by ${PR_AUTHOR} (${HEAD_REF} → ${BASE_REF})
-${diffTruncated ? '⚠️ Diff truncated. Partial review only.' : ''}
+${diffTruncated ? `⚠️ LARGE PR: ${diffTotalLines} lines (${diffTotalChars} chars). Only first ${DIFF_LIMIT} chars included. Use file stat below for full scope.` : ''}
 
 PR Description:
 ${PR_BODY || '(empty)'}
 
-Diff:
+${diffTruncated ? `File Stat (complete list of changed files):\n\`\`\`\n${diffStat}\n\`\`\`\n` : ''}
+Diff${diffTruncated ? ' (truncated)' : ''}:
 \`\`\`diff
 ${diff}
 \`\`\`
