@@ -58,11 +58,7 @@ const handleButtonClick = useCallback(() => handleClick(id), [id]);
 
 ## Next.js 特定
 
-- Server Component 不要用 `useState`、`useEffect`（那是 Client Component 的）
-- `'use client'` 只加在真正需要 interactivity 的元件
-- 資料 fetch 優先在 Server Component 用 `fetch()` + cache
-- 動態路由的 `params` 要做型別驗證
-- `next/image` 取代 `<img>`，`next/link` 取代 `<a>`
+Next.js 規範已獨立為 `nextjs.md`。當 diff 包含 Next.js 相關檔案時會自動載入。
 
 ## 常見 Bug Pattern（[MUST FIX]）
 

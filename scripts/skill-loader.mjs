@@ -46,6 +46,17 @@ export function loadSkills() {
       condition: changedFiles.some(f => f.endsWith('.ts') || f.endsWith('.tsx')),
     },
     {
+      skill: 'nextjs.md',
+      condition: changedFiles.some(f =>
+        (f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js') || f.endsWith('.jsx')) && (
+          f.includes('app/') || f.includes('pages/') ||
+          f.includes('middleware.') || f.includes('next.config') ||
+          f.includes('layout.') || f.includes('loading.') ||
+          f.includes('error.') || f.includes('not-found.')
+        )
+      ),
+    },
+    {
       skill: 'react.md',
       condition: changedFiles.some(f =>
         (f.endsWith('.js') || f.endsWith('.jsx')) &&
