@@ -57,6 +57,17 @@ export function loadSkills() {
       condition: changedFiles.some(f => f.endsWith('.py')),
     },
     {
+      skill: 'django.md',
+      condition: changedFiles.some(f =>
+        f.endsWith('.py') && (
+          f.includes('models') || f.includes('views') ||
+          f.includes('serializers') || f.includes('urls') ||
+          f.includes('admin') || f.includes('settings') ||
+          f.includes('middleware') || f.includes('management/')
+        )
+      ),
+    },
+    {
       skill: 'migration.md',
       condition: changedFiles.some(f =>
         f.includes('migration') || f.includes('schema')

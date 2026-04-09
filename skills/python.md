@@ -70,52 +70,9 @@ if timeout_ms and timeout_ms > 0:
     )
 ```
 
-## Django 特定（fluffy-core）
+## Django 特定
 
-### Model 規範
-- 所有 model 必須有 `created_at`（auto_now_add）和 `updated_at`（auto_now）
-- ForeignKey 必須明確指定 `on_delete`（不用 CASCADE 除非確認）
-- ForeignKey 必須有 `related_name`
-- choices 用 `TextChoices` / `IntegerChoices`，不用 magic strings
-- Meta 必須有 `verbose_name`
-
-```python
-# Bad — magic strings
-ai_status = models.CharField(choices=[("enabled", "Enabled"), ("disabled", "Disabled")])
-
-# Good
-class AIStatus(models.TextChoices):
-    ENABLED = "enabled", "啟用"
-    DISABLED = "disabled", "停用"
-ai_status = models.CharField(choices=AIStatus.choices, default=AIStatus.DISABLED)
-```
-
-### QuerySet 規範
-- ForeignKey 取值必須 `select_related()`
-- 反向關聯必須 `prefetch_related()`
-- 禁止 `.all()` 無 filter/pagination 用在 view 中
-- 使用 `BaseRepository` 做 read/write 分離
-
-### View 規範
-- 統一用 DRF serializer 做 input validation，不要手動 parse `request.GET`
-- 統一回傳 `StandardResponse` 格式，不要混用 `JsonResponse` 和 `Response`
-- 自定義 exception 必須用 `APIException` 子類
-- 所有非 public endpoint 必須通過 `APIKeyAuthMiddleware`
-
-```python
-# Bad — 手動 parse，raw JsonResponse
-def get_products(request):
-    shop_id = request.GET.get("shop_id")
-    return JsonResponse({"data": products})
-
-# Good — serializer + StandardResponse
-class ProductListView(APIView):
-    def get(self, request):
-        serializer = ProductFilterSerializer(data=request.query_params)
-        serializer.is_valid(raise_exception=True)
-        products = ProductService.list(serializer.validated_data)
-        return StandardResponse.success(data=products)
-```
+Django 規範已獨立為 `django.md`。當 diff 包含 Django 相關檔案時會自動載入。
 
 ## 常見 Bug Pattern（[MUST FIX]）
 
