@@ -18,8 +18,8 @@ const {
 
 // ── Config ─────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-20250514';
-const MAX_TOKENS = 4096;
-const DIFF_LIMIT = 12000;       // chars — truncate, never skip
+const MAX_TOKENS = 16384;
+const DIFF_LIMIT = 300000;      // chars — fill context window for thorough review
 
 // ── Diff ───────────────────────────────────────────────────────
 let diff = '';
