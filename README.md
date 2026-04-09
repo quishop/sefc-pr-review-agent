@@ -150,19 +150,21 @@ Branch 命名規則：`feat/{JIRA-KEY}` 或 `fix/{JIRA-KEY}`（例如 `feat/SFA-
 
 ## Skills
 
-動態載入：必載 3 個 + 根據 changed files 條件載入 6 個。
+動態載入：必載 3 個 + 根據 changed files 條件載入 8 個。
 
-| Skill | 觸發條件 | 規則數 | 重點 |
-|-------|---------|--------|------|
-| `review.md` | 必載 | 15+ | PR 結構驗證、AC 覆蓋、評分 1-5 |
-| `naming.md` | 必載 | 20+ | Python snake_case / JS camelCase、禁止命名對照表 |
-| `security.md` | 必載 | 25+ | hardcoded secret 偵測、injection、SSRF、認證檢查 |
-| `python.md` | `.py` | 30+ | type hints、bare except、Django Model/View/QuerySet 規範 |
-| `react.md` | `.js` `.jsx` | 25+ | useEffect 規則、Error Boundary、MUI theme、API key 暴露 |
-| `typescript.md` | `.ts` `.tsx` | 25+ | 禁止 any、Next.js Server/Client Component、React hooks |
-| `migration.md` | `migration` `schema` | 20+ | Django migration reverse_code、危險操作對照表 |
-| `api.md` | `views` `serializers` `urls.py` | 20+ | StandardResponse 格式、DRF serializer 強制、認證 |
-| `infra.md` | `.tf` `k8s` `Dockerfile` `.github/workflows/` | 15+ | Terraform tags、latest tag 禁止、最小權限 |
+| Skill | 觸發條件 | 行數 | 重點 |
+|-------|---------|------|------|
+| `review.md` | 必載 | 49 | PR 結構驗證、AC 覆蓋、評分 1-5 |
+| `naming.md` | 必載 | 43 | Python snake_case / JS camelCase、禁止命名對照表 |
+| `security.md` | 必載 | 75 | hardcoded secret 偵測、injection、SSRF、認證檢查 |
+| `python.md` | `.py` | 93 | type hints、bare except、asyncio、常見 bug pattern |
+| `django.md` | `models` `views` `serializers` `urls` `settings` `middleware` | 221 | Model 規範、QuerySet N+1、StandardResponse、DRF serializer、BaseRepository |
+| `react.md` | `.js` `.jsx` `.ts` `.tsx` | 120 | useEffect 規則、Error Boundary、MUI theme、API key 暴露 |
+| `typescript.md` | `.ts` `.tsx` | 74 | 禁止 any、型別標注、async/await、React hooks |
+| `nextjs.md` | `app/` `pages/` `middleware` `layout` `next.config` | 236 | Server/Client Component、Route Handler、next/image、env 洩漏 |
+| `migration.md` | `migration` `schema` | 61 | Django migration reverse_code、危險操作對照表 |
+| `api.md` | `views` `serializers` `urls.py` | 79 | StandardResponse 格式、DRF serializer 強制、認證 |
+| `infra.md` | `.tf` `k8s` `Dockerfile` `.github/workflows/` | 34 | Terraform tags、latest tag 禁止、最小權限 |
 
 ### Skill 規則來源
 
@@ -185,13 +187,15 @@ sefc-pr-review-agent/
 │   ├── pr-describe.mjs       ← PR Description 自動生成
 │   ├── skill-loader.mjs      ← 動態 skill 載入
 │   └── slack-notify.mjs      ← Slack Block Kit 通知
-├── skills/                    ← 9 個 review skill 定義
+├── skills/                    ← 11 個 review skill 定義
 │   ├── review.md             ← 必載：PR 結構 + 評分
 │   ├── naming.md             ← 必載：命名規範
 │   ├── security.md           ← 必載：安全規則
-│   ├── python.md             ← 條件：Python + Django
+│   ├── python.md             ← 條件：Python 通用
+│   ├── django.md             ← 條件：Django 框架
 │   ├── react.md              ← 條件：React / JavaScript
-│   ├── typescript.md         ← 條件：TypeScript / Next.js
+│   ├── typescript.md         ← 條件：TypeScript 通用
+│   ├── nextjs.md             ← 條件：Next.js 框架
 │   ├── migration.md          ← 條件：DB migration
 │   ├── api.md                ← 條件：API endpoints
 │   └── infra.md              ← 條件：Infrastructure
@@ -223,8 +227,9 @@ sefc-pr-review-agent/
 | Repo | 技術棧 | 自動載入的 Skills |
 |------|--------|-----------------|
 | fluffy-agent-core | Python | review, naming, security, python |
-| fluffy-core | Django + DRF | review, naming, security, python, migration, api |
-| dashboard | React + MUI | review, naming, security, react |
+| fluffy-core | Django + DRF | review, naming, security, python, django, migration, api |
+| dashboard (Next.js 遷移後) | Next.js + TS | review, naming, security, react, typescript, nextjs |
+| dashboard (現況 CRA) | React + JS | review, naming, security, react |
 
 ## Branch 命名規則
 

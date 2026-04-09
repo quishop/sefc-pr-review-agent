@@ -59,8 +59,8 @@ export function loadSkills() {
     {
       skill: 'react.md',
       condition: changedFiles.some(f =>
-        (f.endsWith('.js') || f.endsWith('.jsx')) &&
-        !f.includes('node_modules') && !f.endsWith('.config.js')
+        (f.endsWith('.js') || f.endsWith('.jsx') || f.endsWith('.ts') || f.endsWith('.tsx')) &&
+        !f.includes('node_modules') && !f.endsWith('.config.js') && !f.endsWith('.config.ts')
       ),
     },
     {

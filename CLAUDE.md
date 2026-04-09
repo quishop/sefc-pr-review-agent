@@ -17,16 +17,18 @@ scripts/                    ← 核心腳本（Node.js ESM）
 ├── skill-loader.mjs        ← 動態 skill 載入器
 └── slack-notify.mjs        ← Slack 通知
 
-skills/                     ← Review 規則（Markdown）
+skills/                     ← Review 規則（Markdown，共 11 個）
 ├── review.md               ← 必載：PR 結構 + 評分標準
-├── naming.md               ← 必載：命名規範
-├── security.md             ← 必載：安全規則
-├── python.md               ← 條件：Python + Django
-├── react.md                ← 條件：React / JS
-├── typescript.md           ← 條件：TypeScript / Next.js
-├── migration.md            ← 條件：DB migration
-├── api.md                  ← 條件：API endpoints
-└── infra.md                ← 條件：Infrastructure
+├── naming.md               ← 必載：命名規範（Python + JS）
+├── security.md             ← 必載：安全規則（hardcoded secret、injection）
+├── python.md               ← 條件：Python 通用（type hints、async、bug patterns）
+├── django.md               ← 條件：Django 框架（Model、QuerySet、View、Settings）
+├── react.md                ← 條件：React 元件（hooks、Error Boundary、MUI）
+├── typescript.md           ← 條件：TypeScript 型別（any 禁止、async）
+├── nextjs.md               ← 條件：Next.js 框架（Server/Client Component、routing）
+├── migration.md            ← 條件：DB migration（Django、危險操作）
+├── api.md                  ← 條件：API endpoints（StandardResponse、DRF）
+└── infra.md                ← 條件：Infrastructure（Terraform、Docker、K8s）
 
 .github/workflows/
 └── pr-review.yml           ← Reusable Workflow（備用，目前各 repo 用 inline caller）
@@ -116,13 +118,20 @@ changed files
     │
     ├── 必載：review.md, naming.md, security.md（每次都載入）
     │
-    ├── .py          → python.md（含 Django 規範）
-    ├── .js / .jsx   → react.md（含 MUI 規範）
-    ├── .ts / .tsx    → typescript.md（含 Next.js 規範）
-    ├── migration / schema → migration.md
-    ├── views / serializers / urls.py → api.md
-    └── .tf / k8s / Dockerfile / .github/workflows/ → infra.md
+    ├── .py                               → python.md（純 Python 規範）
+    ├── .py + models/views/serializers/... → django.md（Django 框架規範）
+    ├── .js/.jsx/.ts/.tsx                  → react.md（React 元件規範）
+    ├── .ts/.tsx                           → typescript.md（TypeScript 型別規範）
+    ├── app/pages/layout/middleware/...    → nextjs.md（Next.js 框架規範）
+    ├── migration / schema                → migration.md
+    ├── views / serializers / urls.py     → api.md
+    └── .tf / k8s / Dockerfile / workflows → infra.md
 ```
+
+**語言 vs 框架 skill 的關係：**
+- Python 檔案：python.md 必載，django.md 看路徑是否匹配
+- JS/TS 檔案：react.md 必載，typescript.md 看副檔名，nextjs.md 看路徑
+- 一個 diff 可以同時載入多個 skill（例如改 Django view = python + django + api）
 
 ## 環境變數
 
