@@ -46,6 +46,13 @@ export function loadSkills() {
       condition: changedFiles.some(f => f.endsWith('.ts') || f.endsWith('.tsx')),
     },
     {
+      skill: 'react.md',
+      condition: changedFiles.some(f =>
+        (f.endsWith('.js') || f.endsWith('.jsx')) &&
+        !f.includes('node_modules') && !f.endsWith('.config.js')
+      ),
+    },
+    {
       skill: 'python.md',
       condition: changedFiles.some(f => f.endsWith('.py')),
     },
@@ -59,14 +66,16 @@ export function loadSkills() {
       skill: 'api.md',
       condition: changedFiles.some(f =>
         f.includes('routes') || f.includes('controllers') ||
-        f.includes('handlers') || f.includes('views')
+        f.includes('handlers') || f.includes('views') ||
+        f.includes('serializers') || f.includes('urls.py')
       ),
     },
     {
       skill: 'infra.md',
       condition: changedFiles.some(f =>
         f.endsWith('.tf') || f.includes('k8s/') ||
-        f.includes('helm/') || f.includes('Dockerfile')
+        f.includes('helm/') || f.includes('Dockerfile') ||
+        f.includes('.github/workflows/')
       ),
     },
   ];
