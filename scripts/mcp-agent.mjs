@@ -1,7 +1,7 @@
 // shared-workflows/scripts/mcp-agent.mjs
 // MCP Agent PR Review — comment-only mode (Week 1)
 // Uses Anthropic Messages API with server-side MCP for Jira AC + GitHub review
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { loadSkills } from './skill-loader.mjs';
 
 // ── Environment Variables ──────────────────────────────────────
@@ -201,11 +201,48 @@ try {
   console.log('\nAgent completed');
   console.log(result);
 
+  // Extract score from result (pattern: "X / 5")
+  const scoreMatch = result.match(/(\d)\s*\/\s*5/);
+  const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
+
+  // Extract MUST FIX count
+  const mustFixCount = (result.match(/\[MUST FIX\]/gi) || []).length;
+
+  // Write summary to file for Slack notification step
+  const summary = JSON.stringify({
+    score,
+    mustFixCount,
+    skillNames,
+    jiraTicket: JIRA_TICKET || null,
+    prNumber: PR_NUMBER,
+    prTitle: PR_TITLE,
+    prAuthor: PR_AUTHOR,
+    prUrl: PR_URL,
+    repo: REPO,
+    tokenUsage: data.usage || null,
+    estimatedCost: data.usage
+      ? ((data.usage.input_tokens * 3 / 1_000_000) + (data.usage.output_tokens * 15 / 1_000_000)).toFixed(4)
+      : null,
+  });
+  writeFileSync('/tmp/review-summary.json', summary);
+  console.log('Review summary written to /tmp/review-summary.json');
+
   // Comment-only mode: always exit 0 (don't block merge)
-  // In future: exit 1 for CHANGES_REQUESTED when auto-approve is enabled
 
 } catch (error) {
   console.error(`Agent error: ${error.message}`);
+
+  // Write error summary for Slack
+  writeFileSync('/tmp/review-summary.json', JSON.stringify({
+    score: null,
+    error: error.message,
+    prNumber: PR_NUMBER,
+    prTitle: PR_TITLE,
+    prAuthor: PR_AUTHOR,
+    prUrl: PR_URL,
+    repo: REPO,
+  }));
+
   // Don't block merge on agent failure
   process.exit(0);
 }
