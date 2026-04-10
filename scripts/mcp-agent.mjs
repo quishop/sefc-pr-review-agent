@@ -87,49 +87,91 @@ if (JIRA_TICKET && JIRA_BASE_URL && JIRA_EMAIL && JIRA_TOKEN) {
   jiraAC = JIRA_TICKET ? 'Jira AC unavailable (missing credentials)' : 'No Jira ticket';
 }
 
-// ── Prompt (no MCP — Claude only generates review text) ───────
-const prompt = `You are a code reviewer for ${REPO}. Review PR #${PR_NUMBER}.
+// ── Prompt ─────────────────────────────────────────────────────
+const prompt = `你是 ${REPO} 的資深 code reviewer。請用繁體中文對 PR #${PR_NUMBER} 進行深度審查。
 
-RULES:
-- Only review files in the diff. Do NOT suggest changes to files not in the diff.
-- Only flag issues you can see in the code. Do NOT assume missing files or configs in other repos.
-- [MUST FIX]: only for code logic bugs, unhandled errors, security vulnerabilities, or missing AC implementation.
-- [SUGGESTION]: naming, readability, PR description format, missing tests, style issues.
-- PR description formatting issues (unchecked items, missing fields) are SUGGESTION, never MUST FIX.
-- If the diff is TRUNCATED: you are seeing incomplete code. Do NOT flag syntax errors, missing closing braces, or incomplete logic as MUST FIX if the issue could be caused by truncation. Only flag issues where you can see BOTH the problematic code AND enough surrounding context to be certain it's a real bug. When uncertain, downgrade to [SUGGESTION] with a note that verification is needed due to truncated diff.
+## 審查規則
 
-JIRA TICKET:
+分類標準：
+- **[MUST FIX]** 🔴：程式碼邏輯錯誤、未處理的 exception、安全漏洞、AC 未實作、跨檔案 schema/interface 不一致、資料流斷裂
+- **[SUGGESTION]** 🟡：命名、可讀性、PR description 格式、缺少測試、效能建議
+- PR description 格式問題永遠是 SUGGESTION，不是 MUST FIX
+- 如果 diff 被截斷，不要對截斷處的不完整程式碼判 MUST FIX，降級為 SUGGESTION 並標注需確認
+
+## Jira Ticket
 ${jiraAC}
 
-STEPS:
-1. Check the Jira ticket info above. If AC/requirements are listed, check each item against the diff: ✅ covered or ❌ not covered. Uncovered AC = [MUST FIX]. If no AC defined, write "No AC defined in ticket".
-2. Review the diff using these rules:
+## 審查步驟（請嚴格依序執行）
+
+### Step 1：Jira AC 覆蓋檢查
+如果 Jira ticket 有 AC 或需求列表，逐條對照 diff：✅ covered / ❌ not covered。
+未覆蓋的 AC = [MUST FIX]。沒有 AC 就寫「No AC defined in ticket」。
+
+### Step 2：跨檔案一致性分析（最重要）
+這是最關鍵的步驟。請用 github MCP 的 get_pull_request_files 取得完整檔案列表，
+必要時用 get_file_contents 讀取關鍵檔案的完整內容。重點檢查：
+
+- **State flow 一致性**：上游 skill/function 的 output key 名稱是否與下游的 input key 完全一致？
+  例：A 輸出 \`image_facts\` 但 B 讀取 \`image_analysis\` → 資料斷裂 [MUST FIX]
+- **Schema 一致性**：SKILL.md 定義的 output schema 是否與程式碼實際使用的結構一致？
+  例：SKILL.md 寫 \`size_table_raw\` 但 code 用 \`size_table\` → 不一致 [MUST FIX]
+- **Registry/Map 完整性**：新增的 skill/function 是否有在對應的 registry、field_map、config 中註冊？
+  例：新增 skill 但 \`skill_field_map\` 沒加 → LLM 拿不到必要 context [MUST FIX]
+- **版本相容性**：新舊版本的 interface 是否相容？有沒有 breaking change 沒有 migration？
+
+### Step 3：程式碼品質審查
+依照以下 skills 的規則審查 diff：
 ${skills}
-3. Use github MCP to inspect the PR files if needed for deeper analysis. You can use get_pull_request_files to see the full file list and get_file_contents for specific files.
-4. Post your review using github MCP create_pull_request_review on ${REPO} PR #${PR_NUMBER} with event "COMMENT" (not APPROVE/REQUEST_CHANGES).
-Format the review body as:
+
+### Step 4：產出 Review
+
+使用 github MCP 的 create_pull_request_review 在 ${REPO} PR #${PR_NUMBER} 上發表 review。
+event 類型用 "COMMENT"（不是 APPROVE 或 REQUEST_CHANGES）。
+
+Review body 必須使用以下格式（繁體中文）：
 
 ## AI Code Review
-**Jira**: ${JIRA_TICKET || 'N/A'} | **CI**: ${TEST_PASSED === 'success' ? 'PASSED' : 'FAILED'} | **Coverage**: ${COVERAGE || 'N/A'}% | **Skills**: ${skillNames.join(', ')}
-### AC Coverage
-[AC items with status, or "No Jira ticket" / "No AC defined" / "Jira AC unavailable"]
-### Must Fix
-[items with file:line, or "None"]
-### Suggestions
-[items, or "None"]
-### Score
-X / 5 — [one line reason]
+**Jira**: ${JIRA_TICKET || 'N/A'} | **CI**: ${TEST_PASSED === 'success' ? '通過' : '失敗'} | **覆蓋率**: ${COVERAGE || 'N/A'}% | **Skills**: ${skillNames.join(', ')}
+
+### AC 覆蓋狀況
+[逐條列出 AC 覆蓋狀態，或 "No AC defined in ticket"]
+
+### 必須修正 (Must Fix)
+[每個問題必須包含：]
+[#### 編號. 問題標題 🔴 嚴重度（致命/高/中）]
+[**File**: \`檔案路徑:行號\`]
+[**Issue**: 問題描述（說明為什麼這是 bug，不只是描述現象）]
+[**Fix**: 具體的修正建議（附 code snippet）]
+[如果沒有 MUST FIX 問題，寫 "None"]
+
+### 建議改善 (Suggestions)
+[#### 編號. 問題標題 🟡 嚴重度（中/低）]
+[**File**: \`檔案路徑:行號\`]
+[**Issue**: 描述]
+[**Suggestion**: 建議做法]
+
+### 評分
+X / 5 — [一句話說明]
+
+評分標準：
+- 5 分：無任何問題
+- 4 分：只有 SUGGESTION
+- 3 分：1-2 個 MUST FIX
+- 2 分：3+ 個 MUST FIX
+- 1 分：嚴重安全漏洞或架構問題
+
 ---
 _Automated review by sefc-pr-review-agent_
 
-PR: ${PR_TITLE} by ${PR_AUTHOR} (${HEAD_REF} → ${BASE_REF})
-${diffTruncated ? `⚠️ LARGE PR: ${diffTotalLines} lines (${diffTotalChars} chars). Only first ${DIFF_LIMIT} chars included. Use file stat below for full scope.` : ''}
+## PR 資訊
+- PR: ${PR_TITLE} by ${PR_AUTHOR} (${HEAD_REF} → ${BASE_REF})
+${diffTruncated ? `- ⚠️ 大型 PR：${diffTotalLines} 行（${diffTotalChars} chars）。僅包含前 ${DIFF_LIMIT} chars。` : ''}
 
-PR Description:
+## PR Description
 ${PR_BODY || '(empty)'}
 
-${diffTruncated ? `File Stat (complete list of changed files):\n\`\`\`\n${diffStat}\n\`\`\`\n` : ''}
-Diff${diffTruncated ? ' (truncated)' : ''}:
+${diffTruncated ? `## 完整檔案列表\n\`\`\`\n${diffStat}\n\`\`\`\n` : ''}
+## Diff${diffTruncated ? '（截斷）' : ''}
 \`\`\`diff
 ${diff}
 \`\`\`
