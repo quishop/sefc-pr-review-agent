@@ -4,13 +4,11 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { loadSkills } from './skill-loader.mjs';
-import { getAtlassianToken } from './atlassian-auth.mjs';
 
 // ── Environment Variables ──────────────────────────────────────
 const {
   ANTHROPIC_API_KEY,
   JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN,
-  ATLASSIAN_OAUTH_TOKEN, ATLASSIAN_REFRESH_TOKEN, ATLASSIAN_CLIENT_ID, ATLASSIAN_CLIENT_SECRET,
   GH_TOKEN,
   PR_NUMBER, PR_TITLE, PR_AUTHOR, PR_URL, PR_BODY, REPO,
   BASE_REF, HEAD_REF,
@@ -67,15 +65,39 @@ const ciSummary = [
   `Coverage: ${COVERAGE || 'N/A'}%`,
 ].join('\n');
 
-// ── MCP Servers ───────────────────────────────────────────────
-const atlassianToken = await getAtlassianToken();
+// ── Jira AC via REST API (replaces Atlassian MCP) ─────────────
+let jiraAC = '';
+if (JIRA_TICKET && JIRA_BASE_URL && JIRA_EMAIL && JIRA_TOKEN) {
+  try {
+    const jiraRes = await fetch(
+      `${JIRA_BASE_URL}/rest/api/2/issue/${JIRA_TICKET}?fields=summary,description,customfield_10020`,
+      {
+        headers: {
+          'Authorization': `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64')}`,
+          'Accept': 'application/json',
+        },
+      }
+    );
+    if (jiraRes.ok) {
+      const jiraData = await jiraRes.json();
+      const summary = jiraData.fields?.summary || '';
+      const description = jiraData.fields?.description || '';
+      jiraAC = `**Jira Summary**: ${summary}\n\n**Jira Description**:\n${description}`;
+      console.log(`Jira AC fetched: ${JIRA_TICKET} (${summary})`);
+    } else {
+      console.warn(`Jira API returned ${jiraRes.status}`);
+      jiraAC = 'Jira AC unavailable (API error)';
+    }
+  } catch (e) {
+    console.warn(`Jira fetch error: ${e.message}`);
+    jiraAC = 'Jira AC unavailable (fetch error)';
+  }
+} else {
+  jiraAC = JIRA_TICKET ? 'Jira AC unavailable (missing credentials)' : 'No Jira ticket';
+}
+
+// ── MCP Servers (GitHub only — Jira uses REST API) ────────────
 const mcpServers = [
-  {
-    type: 'url',
-    url: 'https://mcp.atlassian.com/v1/sse',
-    name: 'atlassian',
-    authorization_token: atlassianToken,
-  },
   {
     type: 'url',
     url: 'https://api.githubcopilot.com/mcp/',
@@ -96,10 +118,11 @@ RULES:
 - PR description formatting issues (unchecked items, missing fields) are SUGGESTION, never MUST FIX.
 - If the diff is TRUNCATED: you are seeing incomplete code. Do NOT flag syntax errors, missing closing braces, or incomplete logic as MUST FIX if the issue could be caused by truncation. Only flag issues where you can see BOTH the problematic code AND enough surrounding context to be certain it's a real bug. When uncertain, downgrade to [SUGGESTION] with a note that verification is needed due to truncated diff.
 
+JIRA TICKET:
+${jiraAC}
+
 STEPS:
-1. ${JIRA_TICKET
-  ? `Use atlassian MCP to get ${JIRA_TICKET} from ${JIRA_BASE_URL}. Extract the Acceptance Criteria (AC). If AC exists, check each item against the diff: ✅ covered or ❌ not covered. Uncovered AC = [MUST FIX]. If no AC field in ticket, write "No AC defined in ticket". If MCP fails, write "Jira AC unavailable".`
-  : 'No Jira ticket found. Skip AC check. Write "No Jira ticket" in AC section.'}
+1. Check the Jira ticket info above. If AC/requirements are listed, check each item against the diff: ✅ covered or ❌ not covered. Uncovered AC = [MUST FIX]. If no AC defined, write "No AC defined in ticket".
 2. Review the diff using these rules:
 ${skills}
 3. Use github MCP to create a pull request review on ${REPO} PR #${PR_NUMBER} with event "COMMENT" (not APPROVE/REQUEST_CHANGES). Format:
@@ -136,7 +159,7 @@ console.log(`PR #${PR_NUMBER}: ${PR_TITLE}`);
 console.log(`Jira: ${JIRA_TICKET || 'not found'}`);
 console.log(`Model: ${MODEL}`);
 console.log(`Skills: ${skillNames.join(', ')}`);
-console.log(`MCP servers: ${mcpServers.map(s => s.name).join(', ')}`);
+console.log(`MCP servers: ${mcpServers.map(s => s.name).join(', ')} (Jira via REST)`);
 
 try {
   const response = await fetch('https://api.anthropic.com/v1/messages', {

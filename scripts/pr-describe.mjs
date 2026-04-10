@@ -3,12 +3,10 @@
 // Runs BEFORE mcp-agent.mjs, updates PR body via GitHub API
 import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
-import { getAtlassianToken } from './atlassian-auth.mjs';
 
 const {
   ANTHROPIC_API_KEY,
   JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN,
-  ATLASSIAN_OAUTH_TOKEN, ATLASSIAN_REFRESH_TOKEN, ATLASSIAN_CLIENT_ID, ATLASSIAN_CLIENT_SECRET,
   GH_TOKEN,
   PR_NUMBER, PR_TITLE, PR_AUTHOR, PR_URL, PR_BODY,
   REPO, BASE_REF, HEAD_REF,
@@ -69,14 +67,33 @@ console.log(`Jira: ${JIRA_TICKET || 'not found'}`);
 console.log(`Commits:\n${commits}`);
 console.log(`Files changed:\n${diffStat}`);
 
-// ── MCP Servers ───────────────────────────────────────────────
+// ── Jira via REST API ─────────────────────────────────────────
+let jiraInfo = '';
+if (JIRA_TICKET && JIRA_BASE_URL && JIRA_EMAIL && JIRA_TOKEN) {
+  try {
+    const jiraRes = await fetch(
+      `${JIRA_BASE_URL}/rest/api/2/issue/${JIRA_TICKET}?fields=summary,description`,
+      {
+        headers: {
+          'Authorization': `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64')}`,
+          'Accept': 'application/json',
+        },
+      }
+    );
+    if (jiraRes.ok) {
+      const data = await jiraRes.json();
+      jiraInfo = `Summary: ${data.fields?.summary || ''}\nDescription: ${data.fields?.description || '(empty)'}`;
+      console.log(`Jira fetched: ${JIRA_TICKET}`);
+    } else {
+      console.warn(`Jira API returned ${jiraRes.status}`);
+    }
+  } catch (e) {
+    console.warn(`Jira fetch error: ${e.message}`);
+  }
+}
+
+// ── MCP Servers (GitHub only) ─────────────────────────────────
 const mcpServers = [
-  {
-    type: 'url',
-    url: 'https://mcp.atlassian.com/v1/sse',
-    name: 'atlassian',
-    authorization_token: await getAtlassianToken(),
-  },
   {
     type: 'url',
     url: 'https://api.githubcopilot.com/mcp/',
@@ -93,7 +110,7 @@ CONTEXT:
 - Author: ${PR_AUTHOR}
 - Branch: ${HEAD_REF} → ${BASE_REF}
 - Jira ticket: ${JIRA_TICKET || 'None'}
-
+${jiraInfo ? `\nJIRA TICKET DETAILS:\n${jiraInfo}\n` : ''}
 BRANCH NAMING CONVENTION:
 Developers use "feat/{JIRA-KEY}" or "fix/{JIRA-KEY}" (e.g. feat/SFA-997, fix/SFA-1024).
 The Jira ticket key is extracted from the branch name. Use this ticket to query Jira for context.
@@ -110,9 +127,9 @@ ${diff}
 \`\`\`
 
 STEPS:
-1. ${JIRA_TICKET
-  ? `Use atlassian MCP to get ${JIRA_TICKET} from ${JIRA_BASE_URL}. Extract: Summary, Description, Acceptance Criteria, Priority. If MCP fails, use only commits and diff.`
-  : 'No Jira ticket. Generate description from commits and diff only.'}
+1. ${jiraInfo
+  ? `Use the Jira ticket details provided above to understand the context and requirements.`
+  : 'No Jira ticket info available. Generate description from commits and diff only.'}
 
 2. Analyze commits and diff to understand what changed:
    - What was added/modified/deleted
