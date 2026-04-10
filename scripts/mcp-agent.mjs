@@ -132,9 +132,7 @@ ${skills}
 
 ### Step 4：產出 Review
 
-使用 github MCP 的 create_pull_request_review 在 ${REPO} PR #${PR_NUMBER} 上發表 review。
-event 類型用 "COMMENT"（不是 APPROVE 或 REQUEST_CHANGES）。
-
+直接輸出 review 內容（不要用 MCP 發表，系統會自動發送）。
 Review body 必須使用以下格式（繁體中文）：
 
 ## AI Code Review
@@ -241,11 +239,10 @@ try {
 
   console.log('\nClaude review completed');
 
-  // ── Fallback: post review via REST if MCP didn't ──────────
-  // Check if Claude already posted via MCP (look for tool_use in response)
-  const usedMcpToPost = data.content.some(b => b.type === 'tool_use');
-  if (!usedMcpToPost && result) {
-    console.log('MCP did not post review, using REST API fallback...');
+  // ── Post review via GitHub REST API (always) ──────────────
+  // MCP is used for analysis only, posting is always via REST to avoid duplicates
+  if (result) {
+    console.log('Posting review via GitHub REST API...');
     const reviewRes = await fetch(
       `https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}/reviews`,
       {
@@ -262,13 +259,11 @@ try {
       }
     );
     if (reviewRes.ok) {
-      console.log('Review posted via REST fallback');
+      console.log('Review posted to PR');
     } else {
       const errText = await reviewRes.text();
       console.error(`GitHub REST API Error (${reviewRes.status}): ${errText}`);
     }
-  } else {
-    console.log('Review posted via MCP');
   }
 
   // ── Extract metrics for Slack ─────────────────────────────
