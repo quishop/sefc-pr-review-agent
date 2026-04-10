@@ -105,7 +105,9 @@ STEPS:
 1. Check the Jira ticket info above. If AC/requirements are listed, check each item against the diff: ✅ covered or ❌ not covered. Uncovered AC = [MUST FIX]. If no AC defined, write "No AC defined in ticket".
 2. Review the diff using these rules:
 ${skills}
-3. Output your review in EXACTLY this markdown format (nothing else):
+3. Use github MCP to inspect the PR files if needed for deeper analysis. You can use get_pull_request_files to see the full file list and get_file_contents for specific files.
+4. Post your review using github MCP create_pull_request_review on ${REPO} PR #${PR_NUMBER} with event "COMMENT" (not APPROVE/REQUEST_CHANGES).
+Format the review body as:
 
 ## AI Code Review
 **Jira**: ${JIRA_TICKET || 'N/A'} | **CI**: ${TEST_PASSED === 'success' ? 'PASSED' : 'FAILED'} | **Coverage**: ${COVERAGE || 'N/A'}% | **Skills**: ${skillNames.join(', ')}
@@ -133,12 +135,23 @@ ${diff}
 \`\`\`
 `;
 
-// ── Call Claude API (pure Messages API, no MCP) ───────────────
+// ── MCP Server (GitHub only — for multi-turn reasoning) ───────
+const mcpServers = [
+  {
+    type: 'url',
+    url: 'https://api.githubcopilot.com/mcp/',
+    name: 'github',
+    authorization_token: GH_TOKEN,
+  },
+];
+
+// ── Call Claude API (with GitHub MCP for deep analysis) ───────
 console.log('Agent starting');
 console.log(`PR #${PR_NUMBER}: ${PR_TITLE}`);
-console.log(`Jira: ${JIRA_TICKET || 'not found'}`);
+console.log(`Jira: ${JIRA_TICKET || 'not found'} (via REST)`);
 console.log(`Model: ${MODEL}`);
 console.log(`Skills: ${skillNames.join(', ')}`);
+console.log('MCP: github (multi-turn reasoning)');
 
 try {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -147,10 +160,12 @@ try {
       'Content-Type': 'application/json',
       'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'mcp-client-2025-04-04',
     },
     body: JSON.stringify({
       model: MODEL,
       max_tokens: MAX_TOKENS,
+      mcp_servers: mcpServers,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -175,31 +190,36 @@ try {
     console.log(`Estimated cost: $${estimatedCost.toFixed(4)}`);
   }
 
-  console.log('\nClaude review generated');
+  console.log('\nClaude review completed');
 
-  // ── Post review via GitHub REST API ───────────────────────
-  console.log('Posting review to GitHub...');
-  const reviewRes = await fetch(
-    `https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}/reviews`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `token ${GH_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        body: result,
-        event: 'COMMENT',
-      }),
+  // ── Fallback: post review via REST if MCP didn't ──────────
+  // Check if Claude already posted via MCP (look for tool_use in response)
+  const usedMcpToPost = data.content.some(b => b.type === 'tool_use');
+  if (!usedMcpToPost && result) {
+    console.log('MCP did not post review, using REST API fallback...');
+    const reviewRes = await fetch(
+      `https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}/reviews`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${GH_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          body: result,
+          event: 'COMMENT',
+        }),
+      }
+    );
+    if (reviewRes.ok) {
+      console.log('Review posted via REST fallback');
+    } else {
+      const errText = await reviewRes.text();
+      console.error(`GitHub REST API Error (${reviewRes.status}): ${errText}`);
     }
-  );
-
-  if (reviewRes.ok) {
-    console.log('Review posted to PR');
   } else {
-    const errText = await reviewRes.text();
-    console.error(`GitHub API Error (${reviewRes.status}): ${errText}`);
+    console.log('Review posted via MCP');
   }
 
   // ── Extract metrics for Slack ─────────────────────────────
