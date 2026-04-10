@@ -1,6 +1,5 @@
 // shared-workflows/scripts/mcp-agent.mjs
-// MCP Agent PR Review — comment-only mode (Week 1)
-// Uses Anthropic Messages API with server-side MCP for Jira AC + GitHub review
+// AI PR Review — Claude generates review, Node.js posts via GitHub REST API
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { loadSkills } from './skill-loader.mjs';
@@ -19,7 +18,7 @@ const {
 // ── Config ─────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-20250514';
 const MAX_TOKENS = 16384;
-const DIFF_LIMIT = 500000;      // chars — 100% coverage for large PRs
+const DIFF_LIMIT = 500000;
 
 // ── Diff ───────────────────────────────────────────────────────
 let diff = '';
@@ -28,7 +27,6 @@ let diffTruncated = false;
 let diffTotalLines = 0;
 let diffTotalChars = 0;
 
-// Get diff stat (always available, small size)
 try {
   diffStat = execSync(
     `git diff origin/${BASE_REF}...HEAD --stat`,
@@ -43,7 +41,6 @@ try {
   diffTotalLines = rawDiff.split('\n').length;
   diffTotalChars = rawDiff.length;
 
-  // Always truncate to DIFF_LIMIT — never skip entirely
   if (rawDiff.length > DIFF_LIMIT) {
     diff = rawDiff.slice(0, DIFF_LIMIT) +
       `\n\n[PARTIAL REVIEW: diff truncated at ${DIFF_LIMIT} chars. Full diff has ${diffTotalLines} lines (${diffTotalChars} chars). Review based on truncated diff + file stat below.]`;
@@ -59,18 +56,12 @@ try {
 // ── Skills ─────────────────────────────────────────────────────
 const { content: skills, names: skillNames } = loadSkills();
 
-// ── CI Summary ─────────────────────────────────────────────────
-const ciSummary = [
-  `Test status: ${TEST_PASSED === 'success' ? 'PASSED' : 'FAILED'}`,
-  `Coverage: ${COVERAGE || 'N/A'}%`,
-].join('\n');
-
-// ── Jira AC via REST API (replaces Atlassian MCP) ─────────────
+// ── Jira AC via REST API ──────────────────────────────────────
 let jiraAC = '';
 if (JIRA_TICKET && JIRA_BASE_URL && JIRA_EMAIL && JIRA_TOKEN) {
   try {
     const jiraRes = await fetch(
-      `${JIRA_BASE_URL}/rest/api/2/issue/${JIRA_TICKET}?fields=summary,description,customfield_10020`,
+      `${JIRA_BASE_URL}/rest/api/2/issue/${JIRA_TICKET}?fields=summary,description`,
       {
         headers: {
           'Authorization': `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64')}`,
@@ -96,19 +87,8 @@ if (JIRA_TICKET && JIRA_BASE_URL && JIRA_EMAIL && JIRA_TOKEN) {
   jiraAC = JIRA_TICKET ? 'Jira AC unavailable (missing credentials)' : 'No Jira ticket';
 }
 
-// ── MCP Servers (GitHub only — Jira uses REST API) ────────────
-const mcpServers = [
-  {
-    type: 'url',
-    url: 'https://api.githubcopilot.com/mcp/',
-    name: 'github',
-    authorization_token: GH_TOKEN,
-  },
-];
-
-// ── Prompt ─────────────────────────────────────────────────────
-// Optimized: concise instructions, clear boundaries, structured output
-const prompt = `You are a code reviewer for ${REPO}. Review PR #${PR_NUMBER} and post a review comment.
+// ── Prompt (no MCP — Claude only generates review text) ───────
+const prompt = `You are a code reviewer for ${REPO}. Review PR #${PR_NUMBER}.
 
 RULES:
 - Only review files in the diff. Do NOT suggest changes to files not in the diff.
@@ -125,7 +105,7 @@ STEPS:
 1. Check the Jira ticket info above. If AC/requirements are listed, check each item against the diff: ✅ covered or ❌ not covered. Uncovered AC = [MUST FIX]. If no AC defined, write "No AC defined in ticket".
 2. Review the diff using these rules:
 ${skills}
-3. Use github MCP to create a pull request review on ${REPO} PR #${PR_NUMBER} with event "COMMENT" (not APPROVE/REQUEST_CHANGES). Format:
+3. Output your review in EXACTLY this markdown format (nothing else):
 
 ## AI Code Review
 **Jira**: ${JIRA_TICKET || 'N/A'} | **CI**: ${TEST_PASSED === 'success' ? 'PASSED' : 'FAILED'} | **Coverage**: ${COVERAGE || 'N/A'}% | **Skills**: ${skillNames.join(', ')}
@@ -153,13 +133,12 @@ ${diff}
 \`\`\`
 `;
 
-// ── Call Claude API ────────────────────────────────────────────
-console.log(`MCP Agent starting`);
+// ── Call Claude API (pure Messages API, no MCP) ───────────────
+console.log('Agent starting');
 console.log(`PR #${PR_NUMBER}: ${PR_TITLE}`);
 console.log(`Jira: ${JIRA_TICKET || 'not found'}`);
 console.log(`Model: ${MODEL}`);
 console.log(`Skills: ${skillNames.join(', ')}`);
-console.log(`MCP servers: ${mcpServers.map(s => s.name).join(', ')} (Jira via REST)`);
 
 try {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -168,12 +147,10 @@ try {
       'Content-Type': 'application/json',
       'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'mcp-client-2025-04-04',
     },
     body: JSON.stringify({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      mcp_servers: mcpServers,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -186,30 +163,50 @@ try {
 
   const data = await response.json();
 
-  // Extract text content from response
   const result = data.content
     .filter(b => b.type === 'text')
     .map(b => b.text)
     .join('\n');
 
-  // Log token usage for cost tracking
+  // Log token usage
   if (data.usage) {
     console.log(`\nToken usage: input=${data.usage.input_tokens}, output=${data.usage.output_tokens}`);
     const estimatedCost = (data.usage.input_tokens * 3 / 1_000_000) + (data.usage.output_tokens * 15 / 1_000_000);
     console.log(`Estimated cost: $${estimatedCost.toFixed(4)}`);
   }
 
-  console.log('\nAgent completed');
-  console.log(result);
+  console.log('\nClaude review generated');
 
-  // Extract score from result (pattern: "X / 5")
+  // ── Post review via GitHub REST API ───────────────────────
+  console.log('Posting review to GitHub...');
+  const reviewRes = await fetch(
+    `https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}/reviews`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `token ${GH_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        body: result,
+        event: 'COMMENT',
+      }),
+    }
+  );
+
+  if (reviewRes.ok) {
+    console.log('Review posted to PR');
+  } else {
+    const errText = await reviewRes.text();
+    console.error(`GitHub API Error (${reviewRes.status}): ${errText}`);
+  }
+
+  // ── Extract metrics for Slack ─────────────────────────────
   const scoreMatch = result.match(/(\d)\s*\/\s*5/);
   const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
-
-  // Extract MUST FIX count
   const mustFixCount = (result.match(/\[MUST FIX\]/gi) || []).length;
 
-  // Write summary to file for Slack notification step
   const summary = JSON.stringify({
     score,
     mustFixCount,
@@ -226,14 +223,11 @@ try {
       : null,
   });
   writeFileSync('/tmp/review-summary.json', summary);
-  console.log('Review summary written to /tmp/review-summary.json');
-
-  // Comment-only mode: always exit 0 (don't block merge)
+  console.log('Review summary written');
 
 } catch (error) {
   console.error(`Agent error: ${error.message}`);
 
-  // Write error summary for Slack
   writeFileSync('/tmp/review-summary.json', JSON.stringify({
     score: null,
     error: error.message,
@@ -244,6 +238,5 @@ try {
     repo: REPO,
   }));
 
-  // Don't block merge on agent failure
   process.exit(0);
 }

@@ -1,6 +1,6 @@
 // shared-workflows/scripts/pr-describe.mjs
 // Auto-generate PR description from Jira ticket + commits + diff
-// Runs BEFORE mcp-agent.mjs, updates PR body via GitHub API
+// Claude generates text, Node.js posts via GitHub REST API
 import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 
@@ -17,7 +17,6 @@ const MODEL = 'claude-sonnet-4-20250514';
 const MAX_TOKENS = 4096;
 
 // ── Skip if PR body already has content ───────────────────────
-// If the developer already wrote a detailed description, don't overwrite
 const hasExistingContent = PR_BODY
   && PR_BODY.trim().length > 100
   && PR_BODY.includes('## Summary');
@@ -28,8 +27,6 @@ if (hasExistingContent) {
 }
 
 // ── Gather context ────────────────────────────────────────────
-
-// 1. Commits on this branch
 let commits = '';
 try {
   commits = execSync(
@@ -40,7 +37,6 @@ try {
   commits = '(unable to get commits)';
 }
 
-// 2. Diff stat (file summary, not full diff — saves tokens)
 let diffStat = '';
 try {
   diffStat = execSync(
@@ -51,7 +47,6 @@ try {
   diffStat = '(unable to get diff stat)';
 }
 
-// 3. Full diff (truncated for analysis)
 let diff = '';
 try {
   const rawDiff = readFileSync('/tmp/pr.diff', 'utf8');
@@ -64,8 +59,6 @@ try {
 
 console.log(`PR #${PR_NUMBER}: ${PR_TITLE}`);
 console.log(`Jira: ${JIRA_TICKET || 'not found'}`);
-console.log(`Commits:\n${commits}`);
-console.log(`Files changed:\n${diffStat}`);
 
 // ── Jira via REST API ─────────────────────────────────────────
 let jiraInfo = '';
@@ -92,18 +85,9 @@ if (JIRA_TICKET && JIRA_BASE_URL && JIRA_EMAIL && JIRA_TOKEN) {
   }
 }
 
-// ── MCP Servers (GitHub only) ─────────────────────────────────
-const mcpServers = [
-  {
-    type: 'url',
-    url: 'https://api.githubcopilot.com/mcp/',
-    name: 'github',
-    authorization_token: GH_TOKEN,
-  },
-];
-
-// ── Prompt ─────────────────────────────────────────────────────
+// ── Prompt (no MCP — Claude only generates description text) ──
 const prompt = `Generate a PR description for ${REPO} PR #${PR_NUMBER}.
+Output ONLY the markdown body, nothing else.
 
 CONTEXT:
 - PR title: ${PR_TITLE}
@@ -111,10 +95,6 @@ CONTEXT:
 - Branch: ${HEAD_REF} → ${BASE_REF}
 - Jira ticket: ${JIRA_TICKET || 'None'}
 ${jiraInfo ? `\nJIRA TICKET DETAILS:\n${jiraInfo}\n` : ''}
-BRANCH NAMING CONVENTION:
-Developers use "feat/{JIRA-KEY}" or "fix/{JIRA-KEY}" (e.g. feat/SFA-997, fix/SFA-1024).
-The Jira ticket key is extracted from the branch name. Use this ticket to query Jira for context.
-
 COMMITS:
 ${commits}
 
@@ -126,17 +106,7 @@ DIFF:
 ${diff}
 \`\`\`
 
-STEPS:
-1. ${jiraInfo
-  ? `Use the Jira ticket details provided above to understand the context and requirements.`
-  : 'No Jira ticket info available. Generate description from commits and diff only.'}
-
-2. Analyze commits and diff to understand what changed:
-   - What was added/modified/deleted
-   - Which modules/components were affected
-   - Any notable patterns (new API, DB changes, config changes, new dependencies)
-
-3. Use github MCP to update the PR body of ${REPO} PR #${PR_NUMBER}. Set the body to this exact format (in Traditional Chinese):
+Output this exact format (in Traditional Chinese):
 
 ## 關聯
 ${JIRA_TICKET ? `[${JIRA_TICKET}](${JIRA_BASE_URL}/browse/${JIRA_TICKET})` : 'N/A'}
@@ -158,15 +128,14 @@ ${JIRA_TICKET ? `[${JIRA_TICKET}](${JIRA_BASE_URL}/browse/${JIRA_TICKET})` : 'N/
 - [ ] 無敏感資訊（API keys、密碼）
 - [ ] 相關文件已同步更新
 
-IMPORTANT:
+RULES:
 - Write Summary in Traditional Chinese
 - Be concise, each bullet max 1-2 sentences
-- Test plan items should be specific and actionable based on the actual changes
-- If Jira AC exists, map each AC to a test plan item
-- Do NOT include the diff or commits in the PR description
+- Test plan items should be specific and actionable
+- Do NOT include the diff or commits in the output
 `;
 
-// ── Call Claude API ────────────────────────────────────────────
+// ── Call Claude API (pure Messages API, no MCP) ───────────────
 console.log('Generating PR description...');
 
 try {
@@ -176,12 +145,10 @@ try {
       'Content-Type': 'application/json',
       'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'mcp-client-2025-04-04',
     },
     body: JSON.stringify({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      mcp_servers: mcpServers,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -189,7 +156,7 @@ try {
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`API Error (${response.status}):`, errorText);
-    process.exit(0); // Don't block on failure
+    process.exit(0);
   }
 
   const data = await response.json();
@@ -204,11 +171,29 @@ try {
     console.log(`Estimated cost: $${cost.toFixed(4)}`);
   }
 
-  console.log('PR description generated');
-  console.log(result);
+  // ── Update PR body via GitHub REST API ──────────────────────
+  console.log('Updating PR description...');
+  const updateRes = await fetch(
+    `https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `token ${GH_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ body: result }),
+    }
+  );
+
+  if (updateRes.ok) {
+    console.log('PR description updated');
+  } else {
+    const errText = await updateRes.text();
+    console.error(`GitHub API Error (${updateRes.status}): ${errText}`);
+  }
 
 } catch (error) {
   console.error(`Error: ${error.message}`);
-  // Don't block pipeline on failure
   process.exit(0);
 }
