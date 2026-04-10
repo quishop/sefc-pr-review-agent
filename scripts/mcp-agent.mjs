@@ -18,7 +18,7 @@ const {
 // ── Config ─────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-20250514';
 const MAX_TOKENS = 16384;
-const DIFF_LIMIT = 500000;
+const DIFF_LIMIT = 350000;      // ~87K tokens, stays under 200K limit with MCP schema + prompt
 
 // ── Diff ───────────────────────────────────────────────────────
 let diff = '';
