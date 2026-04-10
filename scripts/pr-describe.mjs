@@ -3,10 +3,12 @@
 // Runs BEFORE mcp-agent.mjs, updates PR body via GitHub API
 import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
+import { getAtlassianToken } from './atlassian-auth.mjs';
 
 const {
   ANTHROPIC_API_KEY,
   JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN,
+  ATLASSIAN_OAUTH_TOKEN, ATLASSIAN_REFRESH_TOKEN, ATLASSIAN_CLIENT_ID, ATLASSIAN_CLIENT_SECRET,
   GH_TOKEN,
   PR_NUMBER, PR_TITLE, PR_AUTHOR, PR_URL, PR_BODY,
   REPO, BASE_REF, HEAD_REF,
@@ -73,7 +75,7 @@ const mcpServers = [
     type: 'url',
     url: 'https://mcp.atlassian.com/v1/sse',
     name: 'atlassian',
-    authorization_token: `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64')}`,
+    authorization_token: await getAtlassianToken(),
   },
   {
     type: 'url',
