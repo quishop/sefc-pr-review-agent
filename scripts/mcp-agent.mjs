@@ -90,6 +90,13 @@ if (JIRA_TICKET && JIRA_BASE_URL && JIRA_EMAIL && JIRA_TOKEN) {
 // ── Prompt ─────────────────────────────────────────────────────
 const prompt = `你是 ${REPO} 的資深 code reviewer。請用繁體中文對 PR #${PR_NUMBER} 進行深度審查。
 
+## 核心原則
+
+**你審查的是 PR 的最終狀態（diff = dev branch vs PR branch HEAD），不是 commit 歷史。**
+- 不要看 commit messages 來推測問題。commit 裡的 "fix" 表示問題已經被修了。
+- 只看 diff 中最終的程式碼。如果某段程式碼在 diff 中是完整且正確的，即使早期 commit 有過問題，也不要報。
+- 用 github MCP 的 get_file_contents 讀到的是 HEAD 的最新狀態，這才是你要審查的版本。
+
 ## 審查規則
 
 分類標準：
